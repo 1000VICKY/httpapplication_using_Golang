@@ -9,6 +9,8 @@ import (
 )
 
 func main() {
+	// 静的ファイル配信際に捜査するディレクトリ
+	var publicRoot string = "C:\\Users\\senbiki\\public"
 
 	// マルチプレクサの生成
 	// var server *http.ServeMux = http.NewServeMux()
@@ -64,10 +66,13 @@ func main() {
 			fmt.Fprint(writer, "Welcome to the page named /register/.")
 		} else {
 			fmt.Println("/register/～")
+			fmt.Println(request.URL.RawQuery)
+			fmt.Println(request.URL.RawPath)
 			// 静的ファイルを返却する場合
 			var filesHandler http.Handler
 			var fixHandler http.Handler
-			filesHandler = http.FileServer(http.Dir("./public"))
+			// 指定したディレクトリをpublicルートとする
+			filesHandler = http.FileServer(http.Dir(publicRoot))
 			fixHandler = http.StripPrefix("/", filesHandler)
 			// ストリームに書き込み
 			fixHandler.ServeHTTP(writer, request)
@@ -91,7 +96,7 @@ func main() {
 			// ルーティング設定した以外のURLにアクセスされた場合は静的ファイルを返却する
 			var filesHandler http.Handler
 			var fixHandler http.Handler
-			filesHandler = http.FileServer(http.Dir("./public"))
+			filesHandler = http.FileServer(http.Dir(publicRoot))
 			// 任意のヘッダーを返却する
 			header.Set("Content-Route", "/")
 			header.Set("Content-RequestedURL", requestedURL)
