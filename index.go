@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"os"
 	"phpi/myreflect"
+	"reflect"
 	"regexp"
 	"strconv"
 	"strings"
@@ -71,6 +72,9 @@ func main() {
 			res, _ := http.Get(replacedParameter)
 			binary, _ := ioutil.ReadAll(res.Body)
 			fmt.Fprint(writer, string(binary))
+			fmt.Println(myreflect.GetObjectMethods(writer))
+			fmt.Println(reflect.TypeOf(writer))
+
 			// var getParamter string = request.URL.RawQuery
 			// var reg *regexp.Regexp
 			// reg, _ = regexp.Compile("imagePath=(.*)$")
@@ -82,6 +86,7 @@ func main() {
 			// 	header.Set("Content-Type", "image/jpeg")
 			// 	fmt.Fprint(writer, string(binary))
 			// }
+			// return
 
 		} else if matchedValue = pattern1.FindAllStringSubmatch(reqeustedURL, -1); len(matchedValue) > 0 {
 			/** /acccount/Acategory/Bgenre のようなURLへのアクセス時 */
@@ -105,7 +110,11 @@ func main() {
 					fmt.Println("ユーザIDの取得に失敗しました。")
 				}
 			}
+			return
 		}
+		fmt.Println("return 後")
+		header.Set("Content-Type", "text/html;charset=UTF-8")
+		fmt.Fprint(writer, "return した後に、レスポンスを返却")
 	})
 
 	// (2)会員登録ページを想定する
