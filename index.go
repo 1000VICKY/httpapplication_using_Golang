@@ -52,29 +52,41 @@ func main() {
 	// (1)各ユーザーのアカウントページ
 	server.HandleFunc("/account/", func(writer http.ResponseWriter, request *http.Request) {
 		// アクセスされたURL
-		var reqeustedURL = request.URL.Path
-		fmt.Println(reqeustedURL + "へアクセスされています。")
+		// var reqeustedURL = request.URL.Path
+		// fmt.Println(reqeustedURL + "へアクセスされています。")
 
-		// 以下よりクライアント側へ任意のレスポンスヘッダーを返却する
-		var header http.Header
-		header = writer.Header()
-		header.Set("Content-RequestedURL", reqeustedURL)
-		header.Set("Content-Route", "/account/")
 		// fmt.Fprint(writer, "Welcome to the page named /account/.")
 
-		pattern1, err := regexp.Compile("^/account/([0-9a-zA-Z_]+)/([0-9a-zA-Z_]+)/?$")
-		if err != nil {
+		// pattern1, err := regexp.Compile("^/account/([0-9a-zA-Z_]+)/([0-9a-zA-Z_]+)/?$")
+		// if err != nil {
 
-		}
-		if reqeustedURL == "/account/" {
+		// }
+		var requestedURL string = request.URL.Path
+		if requestedURL == "/account/" {
+			fmt.Println(request.Header.Get("If-Modified-Since"))
+			fmt.Println(request.Header.Get("User-Agent"))
+			print("===")
 			var getParamter string = request.URL.RawQuery
 			var replacedParameter string = strings.Replace(getParamter, "imagePath=", "", -1)
 			res, _ := http.Get(replacedParameter)
 			binary, _ := ioutil.ReadAll(res.Body)
-			fmt.Fprint(writer, string(binary))
 			fmt.Println(myreflect.GetObjectMethods(writer))
 			fmt.Println(reflect.TypeOf(writer))
-
+			var lastModified string = res.Header.Get("Last-Modified")
+			fmt.Println(lastModified)
+			// レスポンスヘッダーを返却
+			// 以下よりクライアント側へ任意のレスポンスヘッダーを返却する
+			writer.Header().Set("Content-RequestedURL", requestedURL)
+			writer.Header().Set("Content-Route", "/account/")
+			writer.Header().Set("Content-Original", "unique-header")
+			writer.Header().Set("Cache-Control", "max-age=640480")
+			// writer.Header().Set("Last-Modified", lastModified)
+			writer.Header().Set("ETag", "----------")
+			// writer.Header().Set("Cache-Control", strconv.Itoa(60*60*24*14))
+			// writer.Header().Set("Pragma", "cache")
+			writer.Header().Set("Content-Type", "image/jpeg")
+			fmt.Fprint(writer, string(binary))
+			return
 			// var getParamter string = request.URL.RawQuery
 			// var reg *regexp.Regexp
 			// reg, _ = regexp.Compile("imagePath=(.*)$")
@@ -88,32 +100,29 @@ func main() {
 			// }
 			// return
 
-		} else if matchedValue = pattern1.FindAllStringSubmatch(reqeustedURL, -1); len(matchedValue) > 0 {
-			/** /acccount/Acategory/Bgenre のようなURLへのアクセス時 */
-			var mainCategory string
-			var subCategory string
-			mainCategory = matchedValue[0][1]
-			subCategory = matchedValue[0][2]
-			fmt.Fprintln(writer, "以下が閲覧中の情報です<br>")
-			fmt.Fprint(writer, mainCategory)
-			fmt.Fprint(writer, subCategory)
+			// } else if matchedValue = pattern1.FindAllStringSubmatch(reqeustedURL, -1); len(matchedValue) > 0 {
+			// 	/** /acccount/Acategory/Bgenre のようなURLへのアクセス時 */
+			// 	var mainCategory string
+			// 	var subCategory string
+			// 	mainCategory = matchedValue[0][1]
+			// 	subCategory = matchedValue[0][2]
+			// 	fmt.Fprintln(writer, "以下が閲覧中の情報です<br>")
+			// 	fmt.Fprint(writer, mainCategory)
+			// 	fmt.Fprint(writer, subCategory)
 		} else {
-			var userID int
-			var err error
-			matchedValue = userRegex.FindAllStringSubmatch(reqeustedURL, -1)
-			if len(matchedValue) > 0 {
-				userID, err = strconv.Atoi(matchedValue[0][1])
-				if err == nil {
-					fmt.Fprint(writer, "閲覧中のユーザーIDは"+strconv.Itoa(userID)+"です")
-				} else {
-					header.Set("Content-Type", "text/html;charset=UTF-8")
-					fmt.Println("ユーザIDの取得に失敗しました。")
-				}
-			}
-			return
+			// var userID int
+			// var err error
+			// if len(matchedValue) > 0 {
+			// 	userID, err = strconv.Atoi(matchedValue[0][1])
+			// 	if err == nil {
+			// 		fmt.Fprint(writer, "閲覧中のユーザーIDは"+strconv.Itoa(userID)+"です")
+			// 	} else {
+			// 		fmt.Println("ユーザIDの取得に失敗しました。")
+			// 	}
+			// }
+			// return
 		}
 		fmt.Println("return 後")
-		header.Set("Content-Type", "text/html;charset=UTF-8")
 		fmt.Fprint(writer, "return した後に、レスポンスを返却")
 	})
 
