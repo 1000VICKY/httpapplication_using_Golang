@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"html/template"
 	"io/ioutil"
 	"net/http"
 	"os"
@@ -48,6 +49,9 @@ func main() {
 	// 6 => Handler
 	// 7 => ServeHTTP
 
+	// 外部ファイルに記述いした関数でハンドラを登録
+	server.HandleFunc("/account/user/", GetUserInfo)
+
 	// 以下より、Muliti Plexerを使ってルーティングを実装する
 	// (1)各ユーザーのアカウントページ
 	server.HandleFunc("/account/", func(writer http.ResponseWriter, request *http.Request) {
@@ -80,10 +84,10 @@ func main() {
 			writer.Header().Set("Content-Route", "/account/")
 			writer.Header().Set("Content-Original", "unique-header")
 			writer.Header().Set("Cache-Control", "max-age=640480")
-			// writer.Header().Set("Last-Modified", lastModified)
+			writer.Header().Set("Last-Modified", lastModified)
 			writer.Header().Set("ETag", "----------")
-			// writer.Header().Set("Cache-Control", strconv.Itoa(60*60*24*14))
-			// writer.Header().Set("Pragma", "cache")
+			writer.Header().Set("Cache-Control", strconv.Itoa(60*60*24*14))
+			writer.Header().Set("Pragma", "cache")
 			writer.Header().Set("Content-Type", "image/jpeg")
 			fmt.Fprint(writer, string(binary))
 			return
@@ -157,14 +161,24 @@ func main() {
 	server.HandleFunc("/", func(writer http.ResponseWriter, request *http.Request) {
 		var requestedURL string = request.URL.Path
 		var header http.Header = writer.Header()
+		tpl := template.Must(template.ParseFiles("./index.tpl"))
 		if requestedURL == "/" {
-			fmt.Println(myreflect.GetObjectMethods(request))
+			fmt.Println("/へアクセス")
+			vParam := map[string]string{
+				"ImagePath": "https://fukuoka.nasse.com/image/index/newimages/10989/b20170712_1.jpg/1024",
+			}
+
 			// 任意のHTTPレスポンスヘッダーを返却する
-			writer.Header().Set("Content-Original", "My-Original-Header")
-			writer.Header().Set("Content-Error", "1024")
-			writer.Header().Set("A", "a")
-			header.Set("A", "aaa")
-			fmt.Fprintf(writer, "Hello world")
+			// writer.Header().Set("Content-Original", "My-Original-Header")
+			// writer.Header().Set("Content-Error", "1024")
+			// writer.Header().Set("A", "a")
+			// header.Set("A", "aaa")
+			header.Set("Content-Type", "text/html;charset=UTF-8")
+			tpl.Execute(writer, vParam)
+			fmt.Println(vParam)
+			fmt.Println(myreflect.GetObjectMethods(request))
+			// fmt.Fprintf(writer, "Hello world")
+			return
 		} else {
 			fmt.Println("/～")
 			// ルーティング設定した以外のURLにアクセスされた場合は静的ファイルを返却する
