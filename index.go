@@ -1,6 +1,7 @@
 package main
 
 import (
+	"flag"
 	"fmt"
 	"html/template"
 	"io/ioutil"
@@ -11,20 +12,43 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+
+	"golang.org/x/net/http2/hpack"
 )
 
 var err error
 var userRegex *regexp.Regexp
 var matchedValue [][]string
 
+func getCommandOptionFromIndex(i int) string {
+	// 指定したindexのコマンドオプションを取得する
+	flag.Parse()
+	var optionList []string
+	optionList = flag.Args()
+	if len(optionList) > 0 {
+		return optionList[i]
+	} else {
+		return ""
+	}
+}
+
 func main() {
+	// 起動ポートを指定
+	var portNumber string = ""
+	portNumber = getCommandOptionFromIndex(0)
+	if len(portNumber) == 0 {
+		// ポート番号の指定が無い場合は 8080をポート番号とする
+		portNumber = "8080"
+	}
+	fmt.Println(portNumber)
 	// URLパターンマッチング
 	userRegex, err = regexp.Compile("^/account/id/([0-9]+)/?$")
-	// 静的ファイル配信際に捜査するディレクトリ
-	var publicRoot string = "C:\\Users\\senbiki\\public"
+	// 静的ファイル配信の際に捜査するディレクトリ
+	var publicRoot string = "C:/Users/senbiki/public"
+	// テンプレートファイルのディレクトリ
+	var templatePath string = "C:/Users/senbiki/public"
 
 	// マルチプレクサの生成
-	// var server *http.ServeMux = http.NewServeMux()
 	var server *http.ServeMux = new(http.ServeMux)
 
 	// マルチプレクサオブジェクトのメソッド検証
@@ -49,9 +73,21 @@ func main() {
 	// 6 => Handler
 	// 7 => ServeHTTP
 
-	// 外部ファイルに記述いした関数でハンドラを登録
+	// 外部ファイルに記述した関数でハンドラを登録
 	server.HandleFunc("/account/user/", GetUserInfo)
 
+	// クライアントへクッキーを送信する
+	server.HandleFunc("/getCookie/", func(writer http.ResponseWriter, request *http.Request) {
+		writer.Header().Set("Set-Cookie", "third-person=初回サードパーティアクセス時ユーザーにユニークな値を渡す; path=/; Expires=Mon 31 Dec 2025 23:59:59 GMT")
+		fmt.Println(request.Header.Get("Cookie"))
+		// template側からアクセスもとのパラメータを受け取る
+		fmt.Println(request.URL.RawQuery)
+	})
+	// サードパーティクッキーを検証する
+	server.HandleFunc("/cookie/", func(writer http.ResponseWriter, request *http.Request) {
+		var cookie string = request.Header.Get("Cookie")
+		fmt.Println(cookie)
+	})
 	// 以下より、Muliti Plexerを使ってルーティングを実装する
 	// (1)各ユーザーのアカウントページ
 	server.HandleFunc("/account/", func(writer http.ResponseWriter, request *http.Request) {
@@ -159,20 +195,47 @@ func main() {
 
 	// (3)URLルートへのアクセス
 	server.HandleFunc("/", func(writer http.ResponseWriter, request *http.Request) {
+		name, err := os.Hostname()
+		if err != nil {
+			fmt.Println(err)
+		}
+		print("||||")
+		fmt.Println(request.Header)
+		fmt.Println(name)
+		fmt.Println(reflect.TypeOf(name))
+		print("||||")
+		print("<<")
+		fmt.Println(request.Header.Get(":authority"))
+		fmt.Println(request.Header.Get("Host"))
+		print(">>")
 		var requestedURL string = request.URL.Path
 		var header http.Header = writer.Header()
-		tpl := template.Must(template.ParseFiles("./index.tpl"))
+		tpl := template.Must(template.ParseFiles(templatePath + "/index.tpl"))
 		if requestedURL == "/" {
+			http2Header := hpack.NewDecoder(1024, func(f hpack.HeaderField) {
+				fmt.Println(f)
+			})
+			buffer := make([]byte, 2048)
+			headerList, err := http2Header.DecodeFull(buffer)
+			if err != nil {
+				fmt.Println(err)
+			}
+			fmt.Println(headerList)
+			fmt.Println(http2Header)
 			fmt.Println("/へアクセス")
 			vParam := map[string]string{
 				"ImagePath": "https://fukuoka.nasse.com/image/index/newimages/10989/b20170712_1.jpg/1024",
 			}
 
+			// ドメイン名をテンプレートを渡す
+			var query string = request.URL.RawQuery
+			vParam["query"] = query
 			// 任意のHTTPレスポンスヘッダーを返却する
 			// writer.Header().Set("Content-Original", "My-Original-Header")
 			// writer.Header().Set("Content-Error", "1024")
 			// writer.Header().Set("A", "a")
 			// header.Set("A", "aaa")
+			// header.Set("Set-Cookie", "firstName=akifumi;familiyName=senbiki;domain="+requestedURL)
 			header.Set("Content-Type", "text/html;charset=UTF-8")
 			tpl.Execute(writer, vParam)
 			fmt.Println(vParam)
@@ -181,12 +244,15 @@ func main() {
 			return
 		} else {
 			fmt.Println("/～")
+			fmt.Println(requestedURL)
 			// ルーティング設定した以外のURLにアクセスされた場合は静的ファイルを返却する
 			var filesHandler http.Handler
 			var fixHandler http.Handler
 			filesHandler = http.FileServer(http.Dir(publicRoot))
 			// 任意のヘッダーを返却する
+			// header.Set("Set-Cookie", "firstName=akifumi;familiyName=senbiki;domain="+requestedURL)
 			header.Set("Content-Route", "/")
+			writer.Header().Set("Content-Type", "text/html;charset=UTF-8")
 			header.Set("Content-RequestedURL", requestedURL)
 			fixHandler = http.StripPrefix("/", filesHandler)
 			// ストリームに書き込み
@@ -194,7 +260,7 @@ func main() {
 		}
 	})
 
-	err = http.ListenAndServeTLS(":8080",
+	err = http.ListenAndServeTLS("127.0.0.1:"+portNumber,
 		"C:\\Users\\senbiki\\go\\bin\\server.crt",
 		"C:\\Users\\senbiki\\go\\bin\\private.key",
 		server,
