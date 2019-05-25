@@ -12,9 +12,11 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"time"
 
 	"golang.org/x/net/http2/hpack"
 )
+import "golang.org/x/net/http2"
 
 var err error
 var userRegex *regexp.Regexp
@@ -76,32 +78,60 @@ func main() {
 	// 外部ファイルに記述した関数でハンドラを登録
 	server.HandleFunc("/account/user/", GetUserInfo)
 
-	// クライアントへクッキーを送信する
-	server.HandleFunc("/getCookie/", func(writer http.ResponseWriter, request *http.Request) {
-		writer.Header().Set("Set-Cookie", "third-person=初回サードパーティアクセス時ユーザーにユニークな値を渡す; path=/; Expires=Mon 31 Dec 2025 23:59:59 GMT")
-		fmt.Println(request.Header.Get("Cookie"))
-		// template側からアクセスもとのパラメータを受け取る
-		fmt.Println(request.URL.RawQuery)
+	// クライアントへサードパーティーCookieを送信する
+	server.HandleFunc("/FunctionToSendCookie/", func(writer http.ResponseWriter, request *http.Request) {
+		// アクセスしてきたブラウザへタイムスタンプを値とするクッキーを返却する
+		var _time time.Time = time.Now()
+		var _unixtime int64 = _time.Unix()
+		var _unixtimeString string = strconv.Itoa(int(_unixtime))
+		var _header http.Header = writer.Header()
+		var _requestHeader http.Header = request.Header
+		var _requestCookie string = _requestHeader.Get("Cookie")
+		// GETパラメータを取得
+		var _getQuery string = request.URL.RawQuery
+		// アクセス中のHost名を取得
+		var _host string = request.Host
+		// アクセス時のHTTPメソッドを取得
+		var _method string = request.Method
+		_header.Set("Set-Cookie", "RequestMehod="+_method+"path=/; Expires=Mon 31 Dec 2025 23:59:59 GMT")
+		_header.Set("Set-Cookie", "Third-Party-Cookie="+_unixtimeString+";path=/; Expires=Mon 31 Dec 2025 23:59:59 GMT")
+		_header.Set("Set-Cookie", "RequestHost="+_host+";path=/; Expires=Mon 31 Dec 2025 23:59:59 GMT")
+		if len(_requestCookie) > 0 {
+			// 二回目以降のアクセスでブラウザからのクッキーを取得する
+			fmt.Println("クライアントからCookieを取得しました。")
+			fmt.Println("クライアントから送信されたCookie => " + _requestCookie)
+			fmt.Println("GETパラメータ => " + _getQuery)
+		} else {
+			fmt.Println("Cookieのヘッダーがないので初回のアクセスです。")
+			fmt.Println("GETパラメータ => " + _getQuery)
+		}
 	})
 	// サードパーティクッキーを検証する
-	server.HandleFunc("/cookie/", func(writer http.ResponseWriter, request *http.Request) {
-		var cookie string = request.Header.Get("Cookie")
-		fmt.Println(cookie)
+	server.HandleFunc("/ValidateCookie/", func(writer http.ResponseWriter, request *http.Request) {
+		var _header http.Header = request.Header
+		var _cookie string = _header.Get("Cookie")
+		if len(_cookie) > 0 {
+			fmt.Println("クライアントからCookieを取得しました。")
+			fmt.Println("クライアントから送信されたCookie => " + _cookie)
+		} else {
+			fmt.Println("Cookieのヘッダーがないので初回のアクセスです。")
+		}
 	})
+
 	// 以下より、Muliti Plexerを使ってルーティングを実装する
 	// (1)各ユーザーのアカウントページ
 	server.HandleFunc("/account/", func(writer http.ResponseWriter, request *http.Request) {
 		// アクセスされたURL
-		// var reqeustedURL = request.URL.Path
-		// fmt.Println(reqeustedURL + "へアクセスされています。")
-
-		// fmt.Fprint(writer, "Welcome to the page named /account/.")
-
-		// pattern1, err := regexp.Compile("^/account/([0-9a-zA-Z_]+)/([0-9a-zA-Z_]+)/?$")
-		// if err != nil {
-
-		// }
-		var requestedURL string = request.URL.Path
+		var requestedURL = request.URL.Path
+		// http://sample.com/account/{mainCategory}/{subCategory}/
+		pattern1, err := regexp.Compile("^/account/([0-9a-zA-Z_]+)/([0-9a-zA-Z_]+)/?$")
+		if err != nil {
+			fmt.Println("正規表現のコンパイルに失敗しました。")
+			fmt.Println(err)
+			return
+		}
+		// 正規表現にマッチした値を取得する
+		var matchedValue [][]string
 		if requestedURL == "/account/" {
 			fmt.Println(request.Header.Get("If-Modified-Since"))
 			fmt.Println(request.Header.Get("User-Agent"))
@@ -149,18 +179,21 @@ func main() {
 			// 	fmt.Fprintln(writer, "以下が閲覧中の情報です<br>")
 			// 	fmt.Fprint(writer, mainCategory)
 			// 	fmt.Fprint(writer, subCategory)
+		} else if matchedValue = pattern1.FindAllStringSubmatch(requestedURL, -1); len(matchedValue) > 0 {
+			// 指定した正規表現にマッチするURLへのアクセスの場合
+			fmt.Println(matchedValue)
+			var mainCategory = matchedValue[0][1]
+			var subCategory = matchedValue[0][2]
+			// システム的には上記2つのパラメータにマッチする情報を返却する
+			fmt.Println("mainCategory => " + mainCategory)
+			fmt.Println("subCategory => " + subCategory)
+			return
 		} else {
-			// var userID int
-			// var err error
-			// if len(matchedValue) > 0 {
-			// 	userID, err = strconv.Atoi(matchedValue[0][1])
-			// 	if err == nil {
-			// 		fmt.Fprint(writer, "閲覧中のユーザーIDは"+strconv.Itoa(userID)+"です")
-			// 	} else {
-			// 		fmt.Println("ユーザIDの取得に失敗しました。")
-			// 	}
-			// }
-			// return
+			var _header http.Header = request.Header
+			_header.Set("Content-Type", "text/html; charset=UTF-8")
+			_header.Set("Cookie", "Secret-Cookie=極秘Cookie")
+			fmt.Println("仕様外のURLにアクセスしています。")
+			return
 		}
 		fmt.Println("return 後")
 		fmt.Fprint(writer, "return した後に、レスポンスを返却")
@@ -195,6 +228,12 @@ func main() {
 
 	// (3)URLルートへのアクセス
 	server.HandleFunc("/", func(writer http.ResponseWriter, request *http.Request) {
+		fmt.Println(request.Host)
+		fmt.Println(request.Method)
+		fmt.Println(request.RequestURI)
+		frame, err := http2.ReadFrameHeader(request.Body)
+		fmt.Println(err)
+		fmt.Println(frame.Header())
 		name, err := os.Hostname()
 		if err != nil {
 			fmt.Println(err)
@@ -261,8 +300,8 @@ func main() {
 	})
 
 	err = http.ListenAndServeTLS("127.0.0.1:"+portNumber,
-		"C:\\Users\\senbiki\\go\\bin\\server.crt",
-		"C:\\Users\\senbiki\\go\\bin\\private.key",
+		"C:/Users/senbiki/go/bin/server.crt",
+		"C:/Users/senbiki/go/bin/private.key",
 		server,
 	)
 	if err != nil {
