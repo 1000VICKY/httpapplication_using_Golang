@@ -13,14 +13,15 @@ import (
 	"strconv"
 	"strings"
 	"time"
-
-	"golang.org/x/net/http2/hpack"
 )
-import "golang.org/x/net/http2"
 
 var err error
 var userRegex *regexp.Regexp
 var matchedValue [][]string
+
+type MyStringer interface {
+	String() string
+}
 
 func getCommandOptionFromIndex(i int) string {
 	// 指定したindexのコマンドオプションを取得する
@@ -35,6 +36,7 @@ func getCommandOptionFromIndex(i int) string {
 }
 
 func main() {
+	var s MyStringer = nil
 	// 起動ポートを指定
 	var portNumber string = ""
 	portNumber = getCommandOptionFromIndex(0)
@@ -49,7 +51,10 @@ func main() {
 	var publicRoot string = "C:/Users/senbiki/public"
 	// テンプレートファイルのディレクトリ
 	var templatePath string = "C:/Users/senbiki/public"
-
+	s = userRegex
+	fmt.Println("MyStringer")
+	fmt.Println(s)
+	fmt.Println("MyStringer")
 	// マルチプレクサの生成
 	var server *http.ServeMux = new(http.ServeMux)
 
@@ -78,43 +83,105 @@ func main() {
 	// 外部ファイルに記述した関数でハンドラを登録
 	server.HandleFunc("/account/user/", GetUserInfo)
 
-	// クライアントへサードパーティーCookieを送信する
-	server.HandleFunc("/FunctionToSendCookie/", func(writer http.ResponseWriter, request *http.Request) {
-		// アクセスしてきたブラウザへタイムスタンプを値とするクッキーを返却する
-		var _time time.Time = time.Now()
-		var _unixtime int64 = _time.Unix()
-		var _unixtimeString string = strconv.Itoa(int(_unixtime))
-		var _header http.Header = writer.Header()
-		var _requestHeader http.Header = request.Header
-		var _requestCookie string = _requestHeader.Get("Cookie")
-		// GETパラメータを取得
-		var _getQuery string = request.URL.RawQuery
-		// アクセス中のHost名を取得
-		var _host string = request.Host
-		// アクセス時のHTTPメソッドを取得
-		var _method string = request.Method
-		_header.Set("Set-Cookie", "RequestMehod="+_method+"path=/; Expires=Mon 31 Dec 2025 23:59:59 GMT")
-		_header.Set("Set-Cookie", "Third-Party-Cookie="+_unixtimeString+";path=/; Expires=Mon 31 Dec 2025 23:59:59 GMT")
-		_header.Set("Set-Cookie", "RequestHost="+_host+";path=/; Expires=Mon 31 Dec 2025 23:59:59 GMT")
-		if len(_requestCookie) > 0 {
-			// 二回目以降のアクセスでブラウザからのクッキーを取得する
-			fmt.Println("クライアントからCookieを取得しました。")
-			fmt.Println("クライアントから送信されたCookie => " + _requestCookie)
-			fmt.Println("GETパラメータ => " + _getQuery)
-		} else {
-			fmt.Println("Cookieのヘッダーがないので初回のアクセスです。")
-			fmt.Println("GETパラメータ => " + _getQuery)
+	// GETパラメータに渡されたURLにHTTPリクエストを送信する
+	server.HandleFunc("/GetReqestedURLDate", func(writer http.ResponseWriter, request *http.Request) {
+		// 指定されたURLにアクセスする
+		var query string = request.URL.RawQuery
+		var queries []string = strings.Split(query, "&")
+		var parseQueries map[string]string = make(map[string]string)
+		for _, value := range queries {
+			_value := strings.Split(value, "=")
+			parseQueries[_value[0]] = _value[1]
+		}
+		for key, value := range parseQueries {
+			fmt.Println(key + "=>" + value)
+		}
+		// 取得したい画像URLを設定する
+		var imagePath *string = new(string)
+		var ok *bool = new(bool)
+		*imagePath, *ok = parseQueries["imagePath"]
+		// HTTPリクエストを実行
+		var _res *http.Response = nil
+		var _error error = nil
+		if *ok == true {
+			_res, _error = http.Get(*imagePath)
+			if _error != nil {
+				fmt.Println(_error)
+				return
+			}
+			var buffer []byte = make([]byte, 1024)
+			var total []byte = make([]byte, 0)
+			for {
+				n, _error := _res.Body.Read(buffer)
+				if _error != nil {
+					break
+				}
+				// 1byteでも読み取りできた場合
+				if n > 0 {
+					total = append(total, buffer[0:n]...)
+				}
+			}
+			//
+			fmt.Fprint(writer, string(total))
 		}
 	})
+
+	// クライアントへサードパーティーCookieを送信する
+	server.HandleFunc("/FunctionToSendCookie/", func(writer http.ResponseWriter, request *http.Request) {
+		// アクセス中のHost名を取得
+		var _host string = request.Host
+		if _host == "adserver:8080" {
+			// アクセスしてきたブラウザへタイムスタンプを値とするクッキーを返却する
+			var _time time.Time = time.Now()
+			var _unixtime int64 = _time.Unix()
+			var _unixtimeString string = strconv.Itoa(int(_unixtime))
+			var _header http.Header = writer.Header()
+			var _requestHeader http.Header = request.Header
+			var _requestCookie string = _requestHeader.Get("Cookie")
+			// GETパラメータを取得
+			var _getQuery string = request.URL.RawQuery
+			// アクセス時のHTTPメソッドを取得
+			var _method string = request.Method
+			_header.Add("Set-Cookie", "RequestMehod="+_method+";path=/; Expires=Mon 31 Dec 2025 23:59:59 GMT")
+			_header.Add("Set-Cookie", "Third-Party-Cookie="+_unixtimeString+";path=/; Expires=Mon 31 Dec 2025 23:59:59 GMT")
+			_header.Add("Set-Cookie", "RequestHost="+_host+";path=/; Expires=Mon 31 Dec 2025 23:59:59 GMT")
+			if len(_requestCookie) > 0 {
+				// 二回目以降のアクセスでブラウザからのクッキーを取得する
+				fmt.Println("クライアントからCookieを取得しました。")
+				fmt.Println("クライアントから送信されたCookie => " + _requestCookie)
+				fmt.Println("GETパラメータ => " + _getQuery)
+			} else {
+				fmt.Println("Cookieのヘッダーがないので初回のアクセスです。")
+				fmt.Println("GETパラメータ => " + _getQuery)
+			}
+		} else {
+			// 404エラーを返却
+			writer.WriteHeader(404)
+			writer.Header().Set("Content-Type", "text/html")
+			fmt.Fprintln(writer, "規定のホストではありません。")
+		}
+	})
+
 	// サードパーティクッキーを検証する
 	server.HandleFunc("/ValidateCookie/", func(writer http.ResponseWriter, request *http.Request) {
-		var _header http.Header = request.Header
-		var _cookie string = _header.Get("Cookie")
-		if len(_cookie) > 0 {
-			fmt.Println("クライアントからCookieを取得しました。")
-			fmt.Println("クライアントから送信されたCookie => " + _cookie)
+		var _host string = request.Host
+		// 規定のホストからのみ実行を許可する
+		if _host == "adserver:8080" {
+			var _header http.Header = request.Header
+			// 生のCookieを取得する
+			var _cookie string = _header.Get("Cookie")
+			var _cookieList []string = request.Header["Cookie"]
+			fmt.Println(_cookieList)
+			if len(_cookie) > 0 {
+				fmt.Println("クライアントからCookieを取得しました。")
+				fmt.Println("クライアントから送信されたCookie => " + _cookie)
+			} else {
+				fmt.Println("Cookieのヘッダーがないので初回のアクセスです。")
+			}
+			return
 		} else {
-			fmt.Println("Cookieのヘッダーがないので初回のアクセスです。")
+			fmt.Fprintln(writer, "規定のホストではありません。")
+			return
 		}
 	})
 
@@ -228,71 +295,42 @@ func main() {
 
 	// (3)URLルートへのアクセス
 	server.HandleFunc("/", func(writer http.ResponseWriter, request *http.Request) {
-		fmt.Println(request.Host)
-		fmt.Println(request.Method)
-		fmt.Println(request.RequestURI)
-		frame, err := http2.ReadFrameHeader(request.Body)
-		fmt.Println(err)
-		fmt.Println(frame.Header())
-		name, err := os.Hostname()
-		if err != nil {
-			fmt.Println(err)
-		}
-		print("||||")
-		fmt.Println(request.Header)
-		fmt.Println(name)
-		fmt.Println(reflect.TypeOf(name))
-		print("||||")
-		print("<<")
-		fmt.Println(request.Header.Get(":authority"))
-		fmt.Println(request.Header.Get("Host"))
-		print(">>")
 		var requestedURL string = request.URL.Path
-		var header http.Header = writer.Header()
-		tpl := template.Must(template.ParseFiles(templatePath + "/index.tpl"))
+		var _header http.Header = writer.Header()
+		var _host string = request.Host
+		var _method string = request.Method
+		// GETパラメータを取得
+		var query string = request.URL.RawQuery
 		if requestedURL == "/" {
-			http2Header := hpack.NewDecoder(1024, func(f hpack.HeaderField) {
-				fmt.Println(f)
-			})
-			buffer := make([]byte, 2048)
-			headerList, err := http2Header.DecodeFull(buffer)
-			if err != nil {
-				fmt.Println(err)
-			}
-			fmt.Println(headerList)
-			fmt.Println(http2Header)
-			fmt.Println("/へアクセス")
-			vParam := map[string]string{
-				"ImagePath": "https://fukuoka.nasse.com/image/index/newimages/10989/b20170712_1.jpg/1024",
-			}
-
+			// テンプレートオブジェクトの作成
+			var _template *template.Template = nil
+			_template = template.Must(template.ParseFiles(templatePath + "/index.tpl"))
+			// テンプレートに渡すパラメータ
+			var data map[string]string = make(map[string]string)
+			data["ImagePath"] = "https://fukuoka.nasse.com/image/index/newimages/10989/b20170712_1.jpg/1024"
+			data["requestedURL"] = "/"
 			// ドメイン名をテンプレートを渡す
-			var query string = request.URL.RawQuery
-			vParam["query"] = query
+			data["query"] = query
+			data["host"] = _host
+			data["method"] = _method
 			// 任意のHTTPレスポンスヘッダーを返却する
-			// writer.Header().Set("Content-Original", "My-Original-Header")
-			// writer.Header().Set("Content-Error", "1024")
-			// writer.Header().Set("A", "a")
-			// header.Set("A", "aaa")
-			// header.Set("Set-Cookie", "firstName=akifumi;familiyName=senbiki;domain="+requestedURL)
-			header.Set("Content-Type", "text/html;charset=UTF-8")
-			tpl.Execute(writer, vParam)
-			fmt.Println(vParam)
-			fmt.Println(myreflect.GetObjectMethods(request))
-			// fmt.Fprintf(writer, "Hello world")
+			_header.Add("Set-Cookie", "RequestedURL=/;path=/")
+			_header.Set("Content-Type", "text/html;charset=UTF-8")
+			_header.Set("Content-Error", "My-Originaol-Error")
+			_template.Execute(writer, data)
+			fmt.Println(data)
 			return
 		} else {
-			fmt.Println("/～")
-			fmt.Println(requestedURL)
 			// ルーティング設定した以外のURLにアクセスされた場合は静的ファイルを返却する
 			var filesHandler http.Handler
 			var fixHandler http.Handler
 			filesHandler = http.FileServer(http.Dir(publicRoot))
 			// 任意のヘッダーを返却する
-			// header.Set("Set-Cookie", "firstName=akifumi;familiyName=senbiki;domain="+requestedURL)
-			header.Set("Content-Route", "/")
+			writer.Header().Set("Set-Cookie", "RequestedURL="+requestedURL+";path=/")
 			writer.Header().Set("Content-Type", "text/html;charset=UTF-8")
-			header.Set("Content-RequestedURL", requestedURL)
+			writer.Header().Set("Content-Host", _host)
+			writer.Header().Set("Content-Method", _method)
+			writer.Header().Set("Content-RequestedURL", requestedURL)
 			fixHandler = http.StripPrefix("/", filesHandler)
 			// ストリームに書き込み
 			fixHandler.ServeHTTP(writer, request)
